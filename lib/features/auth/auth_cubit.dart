@@ -26,8 +26,9 @@ class AuthSignedIn extends AuthState {
 }
 
 class AuthFailure extends AuthState {
-  const AuthFailure(this.message);
+  const AuthFailure(this.message, {this.recoverable = false});
   final String message;
+  final bool recoverable;
 }
 
 class AuthCubit extends Cubit<AuthState> {
@@ -38,7 +39,7 @@ class AuthCubit extends Cubit<AuthState> {
       emit(AuthSignedIn(await repo.restore()));
     } catch (error) {
       if (error is NetworkFailure || error is TimeoutFailure) {
-        emit(AuthFailure(error.toString()));
+        emit(AuthFailure(error.toString(), recoverable: true));
         return;
       }
       await repo.logout();

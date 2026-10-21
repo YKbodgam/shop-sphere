@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/network/api_client.dart';
+import 'core/errors/failure.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_cubit.dart';
 import 'features/auth/auth_repository.dart';
@@ -65,6 +66,9 @@ class _ShopSphereAppState extends State<ShopSphereApp> {
       redirect: (_, state) {
         final s = auth.state;
         if (s is AuthStarting) {
+          return state.uri.path == '/splash' ? null : '/splash';
+        }
+        if (s is AuthFailure && s.recoverable) {
           return state.uri.path == '/splash' ? null : '/splash';
         }
         if (s is AuthSignedOut || s is AuthFailure) {
@@ -139,21 +143,37 @@ class SplashPage extends StatelessWidget {
   const SplashPage({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.shopping_bag_rounded,
-            size: 64,
-            color: AppTheme.primary,
+    body: BlocBuilder<AuthCubit, AuthState>(
+      builder: (context, state) {
+        final recoverable = state is AuthFailure && state.recoverable;
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.shopping_bag_rounded,
+                size: 64,
+                color: AppTheme.primary,
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                'ShopSphere',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              SizedBox(height: 24.h),
+              if (recoverable) ...[
+                Text(state.message, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => context.read<AuthCubit>().restore(),
+                  child: const Text('Retry'),
+                ),
+              ] else
+                const CircularProgressIndicator(),
+            ],
           ),
-          SizedBox(height: 16.h),
-          Text('ShopSphere', style: Theme.of(context).textTheme.headlineMedium),
-          SizedBox(height: 24.h),
-          const CircularProgressIndicator(),
-        ],
-      ),
+        );
+      },
     ),
   );
 }
@@ -299,14 +319,32 @@ class _ShellPageState extends State<ShellPage> {
   @override
   void initState() {
     super.initState();
-    di<CartStore>().load(userId: widget.userId).then((items) {
+    _loadCart();
+  }
+
+  Future<void> _loadCart() async {
+    try {
+      final items = await di<CartStore>().load(userId: widget.userId);
       if (mounted) cart.value = items;
-    });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingFailure(
+                error,
+                fallback: 'We could not restore your cart.',
+              ),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> updateCart(List<CartItem> items) async {
-    cart.value = items;
     await di<CartStore>().save(items, userId: widget.userId);
+    if (mounted) cart.value = List.unmodifiable(items);
   }
 
   @override
@@ -375,6 +413,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> load({bool refresh = false}) async {
+    if (!refresh && loadingMore) return;
+    final currentRequest = ++requestId;
+    final currentQuery = search.text.trim();
+    final currentCategory = category;
+    final currentSort = sort;
+    final currentOrder = order;
+    final pageSkip = refresh ? 0 : skip;
     if (refresh) {
       skip = 0;
       products = [];
@@ -387,13 +432,13 @@ class _HomePageState extends State<HomePage> {
     }
     try {
       final page = await repo.list(
-        skip: skip,
-        query: search.text,
-        category: category,
-        sort: sort,
-        order: order,
+        skip: pageSkip,
+        query: currentQuery,
+        category: currentCategory,
+        sort: currentSort,
+        order: currentOrder,
       );
-      if (mounted) {
+      if (mounted && currentRequest == requestId) {
         setState(() {
           products = [...products, ...page.products];
           total = page.total;
@@ -403,9 +448,12 @@ class _HomePageState extends State<HomePage> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && currentRequest == requestId) {
         setState(() {
-          error = e.toString();
+          error = userFacingFailure(
+            e,
+            fallback: 'Unable to load products. Please try again.',
+          );
           loading = false;
           loadingMore = false;
         });
@@ -414,17 +462,41 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> add(Product product) async {
+    if (!product.inStock) return;
     final current = [...widget.cart.value];
     final i = current.indexWhere((item) => item.product.id == product.id);
     if (i >= 0) {
+      if (current[i].quantity >= product.stock) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Maximum available quantity already in cart.'),
+          ),
+        );
+        return;
+      }
       current[i] = current[i].copyWith(quantity: current[i].quantity + 1);
     } else {
       current.add(CartItem(product: product, quantity: 1));
     }
-    await widget.onCartChanged(current);
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Added to cart')));
+    try {
+      await widget.onCartChanged(current);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Added to cart')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingFailure(
+                error,
+                fallback: 'We could not save your cart.',
+              ),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -472,7 +544,9 @@ class _HomePageState extends State<HomePage> {
               icon: ValueListenableBuilder<List<CartItem>>(
                 valueListenable: widget.cart,
                 builder: (_, items, _) => Badge(
-                  label: Text('${items.length}'),
+                  label: Text(
+                    '${items.fold<int>(0, (sum, item) => sum + item.quantity)}',
+                  ),
                   isLabelVisible: items.isNotEmpty,
                   child: const Icon(Icons.shopping_cart_outlined),
                 ),
@@ -487,6 +561,9 @@ class _HomePageState extends State<HomePage> {
               controller: search,
               onChanged: (_) {
                 searchDebounce?.cancel();
+                if (search.text.trim().isNotEmpty && category != null) {
+                  setState(() => category = null);
+                }
                 searchDebounce = Timer(const Duration(milliseconds: 400), () {
                   if (mounted) load(refresh: true);
                 });
@@ -522,9 +599,10 @@ class _HomePageState extends State<HomePage> {
                   label: Text(i == 0 ? 'All' : categories[i - 1].name),
                   selected: selected,
                   onSelected: (_) {
-                    setState(
-                      () => category = i == 0 ? null : categories[i - 1].slug,
-                    );
+                    setState(() {
+                      category = i == 0 ? null : categories[i - 1].slug;
+                      search.clear();
+                    });
                     load(refresh: true);
                   },
                 );
@@ -561,7 +639,7 @@ class _HomePageState extends State<HomePage> {
                     return ProductCard(
                       product: p,
                       onTap: () => context.push('/product/${p.id}'),
-                      onAdd: () => add(p),
+                      onAdd: p.inStock ? () => add(p) : null,
                     );
                   }, childCount: products.length + (skip < total ? 1 : 0)),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -604,7 +682,7 @@ class ProductCard extends StatelessWidget {
   });
   final Product product;
   final VoidCallback onTap;
-  final VoidCallback onAdd;
+  final VoidCallback? onAdd;
   @override
   Widget build(BuildContext context) => Card(
     child: InkWell(
@@ -675,24 +753,33 @@ class _ProductPageState extends State<ProductPage> {
   @override
   void initState() {
     super.initState();
-    di<ProductRepository>()
-        .details(widget.id)
-        .then((value) {
-          if (mounted) {
-            setState(() {
-              product = value;
-              loading = false;
-            });
-          }
-        })
-        .catchError((e) {
-          if (mounted) {
-            setState(() {
-              error = e.toString();
-              loading = false;
-            });
-          }
+    _loadProduct();
+  }
+
+  Future<void> _loadProduct() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final value = await di<ProductRepository>().details(widget.id);
+      if (mounted) {
+        setState(() {
+          product = value;
+          loading = false;
         });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          error = userFacingFailure(
+            e,
+            fallback: 'Unable to load this product.',
+          );
+          loading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -705,7 +792,7 @@ class _ProductPageState extends State<ProductPage> {
         appBar: AppBar(),
         body: ErrorView(
           message: error ?? 'Product not found',
-          onRetry: () => setState(() => loading = true),
+          onRetry: _loadProduct,
         ),
       );
     }
@@ -875,23 +962,46 @@ class _ProductPageState extends State<ProductPage> {
             onPressed: p.inStock
                 ? () async {
                     final store = di<CartStore>();
-                    final items = await store.load();
-                    final i = items.indexWhere(
-                      (item) => item.product.id == p.id,
-                    );
-                    if (i >= 0) {
-                      items[i] = items[i].copyWith(
-                        quantity: items[i].quantity + quantity,
+                    final authState = context.read<AuthCubit>().state;
+                    final userId = authState is AuthSignedIn
+                        ? authState.user.id
+                        : 0;
+                    try {
+                      final items = await store.load(userId: userId);
+                      final i = items.indexWhere(
+                        (item) => item.product.id == p.id,
                       );
-                    } else {
-                      items.add(CartItem(product: p, quantity: quantity));
-                    }
-                    await store.save(items);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Added to cart')),
-                      );
-                      context.go('/home');
+                      if (i >= 0) {
+                        final nextQuantity = items[i].quantity + quantity;
+                        if (nextQuantity > p.stock) {
+                          throw const ValidationFailure(
+                            'The selected quantity exceeds available stock.',
+                          );
+                        }
+                        items[i] = items[i].copyWith(quantity: nextQuantity);
+                      } else {
+                        items.add(CartItem(product: p, quantity: quantity));
+                      }
+                      await store.save(items, userId: userId);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Added to cart')),
+                        );
+                        context.go('/home');
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              userFacingFailure(
+                                error,
+                                fallback: 'We could not save your cart.',
+                              ),
+                            ),
+                          ),
+                        );
+                      }
                     }
                   }
                 : null,
@@ -934,7 +1044,8 @@ class CartPage extends StatelessWidget {
               if (items.isNotEmpty)
                 IconButton(
                   tooltip: 'Clear cart',
-                  onPressed: () => onCartChanged([]),
+                  onPressed: () =>
+                      _tryUpdateCart(context, () => onCartChanged([])),
                   icon: const Icon(Icons.delete_outline),
                 ),
             ],
@@ -954,7 +1065,10 @@ class CartPage extends StatelessWidget {
                             item: item,
                             onRemove: () {
                               final next = [...items]..removeAt(i);
-                              onCartChanged(next);
+                              _tryUpdateCart(
+                                context,
+                                () => onCartChanged(next),
+                              );
                             },
                             onDecrease: () {
                               final next = [...items];
@@ -965,7 +1079,10 @@ class CartPage extends StatelessWidget {
                                   quantity: item.quantity - 1,
                                 );
                               }
-                              onCartChanged(next);
+                              _tryUpdateCart(
+                                context,
+                                () => onCartChanged(next),
+                              );
                             },
                             onIncrease: item.quantity < item.product.stock
                                 ? () {
@@ -973,7 +1090,10 @@ class CartPage extends StatelessWidget {
                                     next[i] = item.copyWith(
                                       quantity: item.quantity + 1,
                                     );
-                                    onCartChanged(next);
+                                    _tryUpdateCart(
+                                      context,
+                                      () => onCartChanged(next),
+                                    );
                                   }
                                 : () {},
                           );
@@ -1073,7 +1193,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       labelText: 'Phone number',
                       prefixIcon: Icon(Icons.phone_outlined),
                     ),
-                    validator: requiredField,
+                    validator: phoneValue,
                   ),
                 ],
               ),
@@ -1127,7 +1247,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Could not place order. ${error.toString()}',
+                                  userFacingFailure(
+                                    error,
+                                    fallback: 'Could not place the simulated order. Please try again.',
+                                  ),
                                 ),
                               ),
                             );
@@ -1150,6 +1273,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
 String? requiredField(String? value) =>
     value == null || value.trim().isEmpty ? 'This field is required' : null;
+
+Future<void> _tryUpdateCart(
+  BuildContext context,
+  Future<void> Function() update,
+) async {
+  try {
+    await update();
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFacingFailure(error, fallback: 'We could not save your cart.'),
+          ),
+        ),
+      );
+    }
+  }
+}
 
 class OrderPlacedPage extends StatelessWidget {
   const OrderPlacedPage({super.key, this.order});
@@ -1250,7 +1392,9 @@ class ProfilePage extends StatelessWidget {
         if (state is ProfileFailure) {
           return ErrorView(
             message: state.message,
-            onRetry: () => context.read<ProfileCubit>().load(),
+            onRetry: state.sessionExpired
+                ? () => context.read<AuthCubit>().logout(state.message)
+                : () => context.read<ProfileCubit>().load(),
           );
         }
         final user = state is ProfileReady ? state.user : null;

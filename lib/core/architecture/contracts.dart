@@ -13,5 +13,6 @@ class PageRequest extends Equatable {
   const PageRequest({this.skip = 0, this.limit = 20});
   final int skip;
   final int limit;
-  @override List<Object?> get props => [skip, limit];
+  @override
+  List<Object?> get props => [skip, limit];
 }

@@ -6,8 +6,10 @@ class OrderConfirmationPage extends StatelessWidget {
     required this.orderId,
     required this.total,
   });
+
   final Object? orderId;
   final double total;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(

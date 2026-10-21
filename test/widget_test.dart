@@ -1,30 +1,35 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shopsphere/main.dart';
+import 'package:shopsphere/features/products/domain/product.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const ShopSphereApp());
+  testWidgets('out-of-stock product disables add to cart', (
+    WidgetTester tester,
+  ) async {
+    const product = Product(
+      id: 1,
+      title: 'Unavailable product',
+      description: 'Description',
+      category: 'category',
+      price: 10,
+      discountPercentage: 5,
+      rating: 4,
+      stock: 0,
+      thumbnail: '',
+      images: [],
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductCard(product: product, onTap: () {}, onAdd: null),
+        ),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    final addButton = tester.widget<IconButton>(find.byType(IconButton));
+    expect(addButton.onPressed, isNull);
   });
 }

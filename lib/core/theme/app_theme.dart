@@ -14,9 +14,24 @@ abstract final class AppTheme {
   static ThemeData light() => ThemeData(
     useMaterial3: true,
     scaffoldBackgroundColor: Colors.white,
-    appBarTheme: const AppBarTheme(backgroundColor: Colors.white, foregroundColor: ink, elevation: 0, surfaceTintColor: Colors.transparent),
-    navigationBarTheme: const NavigationBarThemeData(height: 72, backgroundColor: Colors.white, indicatorColor: paleBlue, labelTextStyle: WidgetStatePropertyAll(TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-    colorScheme: ColorScheme.fromSeed(seedColor: primary, brightness: Brightness.light),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: ink,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+    ),
+    navigationBarTheme: const NavigationBarThemeData(
+      height: 72,
+      backgroundColor: Colors.white,
+      indicatorColor: paleBlue,
+      labelTextStyle: WidgetStatePropertyAll(
+        TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+    ),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: primary,
+      brightness: Brightness.light,
+    ),
     textTheme: const TextTheme(
       headlineSmall: TextStyle(fontWeight: FontWeight.w800, color: ink),
       titleLarge: TextStyle(fontWeight: FontWeight.w800, color: ink),
@@ -24,9 +39,21 @@ abstract final class AppTheme {
       bodyMedium: TextStyle(color: muted, height: 1.35),
     ),
     inputDecorationTheme: InputDecorationTheme(
-      filled: true, fillColor: surface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: primary, width: 1.5)),
+      filled: true,
+      fillColor: surface,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: primary, width: 1.5),
+      ),
     ),
-    cardTheme: CardThemeData(elevation: 0, color: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    ),
   );
 }
