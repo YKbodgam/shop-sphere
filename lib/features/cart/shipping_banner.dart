@@ -1,0 +1,3 @@
+import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
+class ShippingBanner extends StatelessWidget { const ShippingBanner({super.key}); @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), decoration: BoxDecoration(color: AppTheme.paleBlue, borderRadius: BorderRadius.circular(12)), child: const Row(children: [Icon(Icons.local_shipping_outlined, color: AppTheme.primary, size: 19), SizedBox(width: 8), Expanded(child: Text('Free shipping on orders above \$50', style: TextStyle(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.w600))), Icon(Icons.chevron_right, color: AppTheme.primary)])); }
