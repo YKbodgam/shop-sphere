@@ -43,12 +43,15 @@ class ApiClient {
             }
             await storage.delete(key: 'access_token');
             await storage.delete(key: 'refresh_token');
+            await onSessionExpired?.call();
           }
           handler.next(error);
         },
       ),
     );
   }
+  Future<void> Function()? onSessionExpired;
+
   bool _isPublic(String path) =>
       path.startsWith('/auth/login') || path.startsWith('/auth/refresh');
   Future<bool>? _refreshing;
@@ -68,14 +71,27 @@ class ApiClient {
       );
       final access = response.data['accessToken'] as String?;
       if (access == null || access.isEmpty) return false;
-      await storage.write(key: 'access_token', value: access);
       final nextRefresh = response.data['refreshToken'] as String?;
-      if (nextRefresh != null && nextRefresh.isNotEmpty) {
-        await storage.write(key: 'refresh_token', value: nextRefresh);
-      }
+      await _writeTokens(
+        access,
+        nextRefresh?.isNotEmpty == true ? nextRefresh! : refreshToken,
+      );
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<void> _writeTokens(String access, String refresh) async {
+    try {
+      await storage.write(key: 'access_token', value: access);
+      await storage.write(key: 'refresh_token', value: refresh);
+    } catch (_) {
+      try {
+        await storage.delete(key: 'access_token');
+        await storage.delete(key: 'refresh_token');
+      } catch (_) {}
+      throw const StorageFailure();
     }
   }
 

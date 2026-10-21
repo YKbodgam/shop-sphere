@@ -98,7 +98,7 @@ lib/
 - **Domain layer:** Product, category, session, cart, pricing, and order representations.
 - **Presentation layer:** Cubits, routes, screens, forms, cards, loading states, empty states, and error recovery.
 
-Repositories own remote access. Cubits own feature state and asynchronous transitions. Widgets render state and dispatch user intent; they should not own API or pricing logic.
+Repositories own remote access. Feature Cubits own reusable domain state and asynchronous transitions; the current shell also contains the catalogue presentation coordinator for the assignment flow. Widgets render state and dispatch user intent; they do not make direct API calls or perform pricing calculations.
 
 ## Authentication and session behavior
 
@@ -150,11 +150,12 @@ DummyJSON checkout is simulated. It does not charge a payment method or guarante
 - Search is debounced by approximately 400 ms.
 - Search resets pagination and ignores stale responses.
 - Category changes reset pagination and preserve the selected category for later pages.
+- Search and category are explicit mutually exclusive catalogue modes; changing one clears the other before a new request.
 - Sorting supports price ascending, price descending, rating, and title options.
-- Duplicate products are not appended during pagination.
+- Duplicate products are removed by product ID before pagination results are appended.
 - Pagination stops when the loaded count reaches the reported total.
 - Pull-to-refresh replaces the remote list while retaining query parameters.
-- Initial loading, loading-more, empty, no-results, and recoverable error states are distinct.
+- Initial loading, loading-more, empty, no-results, category-loading, and recoverable error states are distinct.
 - Product images use cached loading with fallbacks.
 
 ## Cart and pricing rules

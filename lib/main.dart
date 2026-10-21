@@ -59,7 +59,9 @@ class _ShopSphereAppState extends State<ShopSphereApp> {
   @override
   void initState() {
     super.initState();
-    auth = AuthCubit(di<AuthRepository>())..restore();
+    auth = AuthCubit(di<AuthRepository>());
+    di<ApiClient>().onSessionExpired = auth.expire;
+    auth.restore();
     router = GoRouter(
       initialLocation: '/splash',
       refreshListenable: GoRouterRefreshStream(auth.stream),
@@ -388,6 +390,7 @@ class _HomePageState extends State<HomePage> {
   int requestId = 0;
   List<Product> products = [];
   List<Category> categories = [];
+  String? categoryError;
   String? category;
   String? sort;
   String order = 'asc';
@@ -400,9 +403,24 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     load();
-    repo.categories().then((items) {
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() => categoryError = null);
+    try {
+      final items = await repo.categories();
       if (mounted) setState(() => categories = items);
-    });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          categoryError = userFacingFailure(
+            error,
+            fallback: 'Unable to load categories.',
+          );
+        });
+      }
+    }
   }
 
   @override
@@ -440,7 +458,11 @@ class _HomePageState extends State<HomePage> {
       );
       if (mounted && currentRequest == requestId) {
         setState(() {
-          products = [...products, ...page.products];
+          final existingIds = products.map((product) => product.id).toSet();
+          final freshProducts = page.products.where(
+            (product) => existingIds.add(product.id),
+          );
+          products = [...products, ...freshProducts];
           total = page.total;
           skip = products.length;
           loading = false;
@@ -554,6 +576,16 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
+        if (categoryError != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: ErrorView(
+                message: categoryError!,
+                onRetry: _loadCategories,
+              ),
+            ),
+          ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),

@@ -65,4 +65,12 @@ class AuthCubit extends Cubit<AuthState> {
     await repo.logout();
     emit(AuthSignedOut(message));
   }
+
+  Future<void> expire() async {
+    if (state is AuthSignedOut) return;
+    await repo.logout();
+    emit(
+      const AuthSignedOut('Your session has expired. Please sign in again.'),
+    );
+  }
 }

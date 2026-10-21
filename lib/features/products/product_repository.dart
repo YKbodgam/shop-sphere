@@ -1,5 +1,6 @@
 import '../../core/network/api_client.dart';
 import '../../core/network/endpoints.dart';
+import '../../core/errors/failure.dart';
 import 'domain/product.dart';
 
 class ProductPage {
@@ -31,6 +32,14 @@ class ProductRepository implements ProductDataSource {
     String? sort,
     String order = 'asc',
   }) async {
+    if (query != null &&
+        query.trim().isNotEmpty &&
+        category != null &&
+        category.isNotEmpty) {
+      throw const ValidationFailure(
+        'Search and category filters cannot be combined.',
+      );
+    }
     final path = query != null && query.trim().isNotEmpty
         ? '/products/search'
         : category != null && category.isNotEmpty
